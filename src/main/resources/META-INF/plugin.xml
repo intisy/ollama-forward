@@ -1,0 +1,17 @@
+<idea-plugin>
+    <id>io.github.intisy.ollama.forward</id>
+    <name>Ollama Forward</name>
+    <vendor>intisy</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.platform.ml.impl</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationService
+                serviceImplementation="io.github.intisy.ollama.forward.settings.PluginSettingsService"/>
+        <applicationService
+                serviceImplementation="io.github.intisy.ollama.forward.settings.SecureStore"/>
+        <postStartupActivity
+                implementation="io.github.intisy.ollama.forward.proxy.ProxyServerManager"/>
+    </extensions>
+</idea-plugin>

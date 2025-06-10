@@ -1,0 +1,127 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'org.commonmark:commonmark:0.22.0'
+    }
+}
+
+import org.jetbrains.changelog.Changelog
+import static org.jetbrains.changelog.Changelog.OutputType.HTML
+import org.commonmark.parser.Parser
+import org.commonmark.renderer.html.HtmlRenderer
+
+plugins {
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm' version '1.9.24'
+    id 'org.jetbrains.intellij.platform' version '2.6.0'
+    id 'org.jetbrains.changelog' version '2.2.0'
+    id 'org.jetbrains.qodana' version '0.1.13'
+    id 'org.jetbrains.kotlinx.kover' version '0.8.2'
+}
+
+group = property('pluginGroup')
+version = property('pluginVersion')
+
+kotlin {
+    jvmToolchain(21)
+}
+
+repositories {
+    mavenCentral()
+    intellijPlatform {
+        defaultRepositories()
+        snapshots()
+    }
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.opentest4j:opentest4j:1.3.0'
+
+    def platformVersionProvider = providers.gradleProperty('platformVersion')
+    testImplementation "org.jetbrains.intellij.platform:intellij-platform-test-framework:${platformVersionProvider.get()}"
+    testImplementation "org.jetbrains.intellij.platform:intellij-platform-test-framework-junit5:${platformVersionProvider.get()}"
+
+    intellijPlatform {
+        create(property('platformType'), platformVersionProvider)
+        bundledPlugins(providers.gradleProperty('platformBundledPlugins').map { it.split(',').toList() })
+        plugins(providers.gradleProperty('platformPlugins').map { it.split(',').toList() })
+    }
+}
+
+intellijPlatform {
+    pluginConfiguration {
+        name = property('pluginName')
+        version = property('pluginVersion')
+
+        def readmeFile = project.file('README.md')
+        if (!readmeFile.exists()) { throw new GradleException("README.md not found.") }
+        def readmeContent = readmeFile.text
+        def startMarker = '<!-- Plugin description -->'
+        def endMarker = '<!-- Plugin description end -->'
+        if (!readmeContent.contains(startMarker) || !readmeContent.contains(endMarker)) { throw new GradleException("Plugin description markers not found in README.md") }
+        def parsedContent = readmeContent.split(startMarker)[1].split(endMarker)[0].trim()
+        def parser = Parser.builder().build()
+        def document = parser.parse(parsedContent)
+        def renderer = HtmlRenderer.builder().build()
+        description = renderer.render(document)
+
+        def changelog = project.changelog
+        changeNotes = providers.gradleProperty('pluginVersion').map { pluginVersion ->
+            def item = changelog.getOrNull(pluginVersion) ?: changelog.getUnreleased()
+            return changelog.renderItem(item.withHeader(false).withEmptySections(false), HTML)
+        }
+
+        ideaVersion {
+            sinceBuild = property('pluginSinceBuild')
+            untilBuild = property('pluginUntilBuild')
+        }
+    }
+
+    signing {
+        certificateChain = System.getenv("CERTIFICATE_CHAIN")
+        privateKey = System.getenv("PRIVATE_KEY")
+        password = System.getenv("PRIVATE_KEY_PASSWORD")
+    }
+
+    publishing {
+        token = System.getenv("PUBLISH_TOKEN")
+        channels = providers.gradleProperty('pluginVersion').map { v ->
+            def parts = v.split('-')
+            if (parts.size() < 2 || parts[1].isEmpty()) { return ['default'] }
+            def channel = parts[1].split('\\.')[0]
+            return [channel]
+        }
+    }
+
+    pluginVerification {
+        ides {
+            version(providers.gradleProperty("platformVersion"))
+        }
+    }
+}
+
+changelog {
+    groups = []
+    repositoryUrl = property('pluginRepositoryUrl')
+}
+
+kover {
+    reports {
+        total {
+            xml {
+                onCheck = true
+            }
+        }
+    }
+}
+
+tasks.named('wrapper', Wrapper) {
+    gradleVersion = property('gradleVersion')
+}
+
+tasks.named('publishPlugin') {
+    dependsOn tasks.named('patchChangelog')
+}
