@@ -5,26 +5,23 @@ import com.intellij.credentialStore.Credentials;
 import com.intellij.ide.passwordSafe.PasswordSafe;
 
 public class SecureStore {
-    private static final String SERVICE_NAME_PREFIX = "OLLAMA_FORWARD_API_KEYS";
+    private static final String SERVICE_NAME = "OllamaForwardAPIKey";
 
-    private CredentialAttributes createCredentialAttributes(String modelName) {
-        return new CredentialAttributes(SERVICE_NAME_PREFIX + "_" + modelName);
+    private CredentialAttributes getAttributes(String key) {
+        return new CredentialAttributes(SERVICE_NAME + "_" + key);
     }
 
-    public void saveApiKey(String modelName, String apiKey) {
-        CredentialAttributes attributes = createCredentialAttributes(modelName);
-        Credentials credentials = new Credentials(modelName, apiKey);
-        PasswordSafe.getInstance().set(attributes, credentials);
+    public void saveApiKey(String providerId, String apiKey) {
+        PasswordSafe.getInstance()
+                .set(getAttributes(providerId), new Credentials(providerId, apiKey));
     }
 
-    public String getApiKey(String modelName) {
-        CredentialAttributes attributes = createCredentialAttributes(modelName);
-        Credentials credentials = PasswordSafe.getInstance().get(attributes);
-        return (credentials != null) ? credentials.getPasswordAsString() : null;
+    public String getApiKey(String providerId) {
+        Credentials creds = PasswordSafe.getInstance().get(getAttributes(providerId));
+        return creds != null ? creds.getPasswordAsString() : "";
     }
 
-    public void removeApiKey(String modelName) {
-        CredentialAttributes attributes = createCredentialAttributes(modelName);
-        PasswordSafe.getInstance().set(attributes, null);
+    public void removeApiKey(String providerId) {
+        PasswordSafe.getInstance().set(getAttributes(providerId), null);
     }
 }

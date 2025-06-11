@@ -1,95 +1,85 @@
 package io.github.intisy.ollama.forward.proxy;
 
+import com.esotericsoftware.kryo.kryo5.minlog.Log;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import io.github.intisy.ollama.forward.client.ApiClient;
-import io.github.intisy.ollama.forward.client.DeepSeekClient;
-import io.github.intisy.ollama.forward.client.GeminiClient;
-import io.github.intisy.ollama.forward.client.OpenAiClient;
+import io.github.intisy.ollama.forward.client.*;
 import io.github.intisy.ollama.forward.settings.CustomLLM;
 import io.github.intisy.ollama.forward.settings.PluginSettingsService;
 import io.github.intisy.ollama.forward.settings.SecureStore;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.http.*;
 import java.util.Map;
 import java.util.Optional;
 
 public class ChatHandler implements HttpHandler {
-
     private final Gson gson = new Gson();
     private final PluginSettingsService settings = PluginSettingsService.getInstance();
     private final SecureStore secureStore = new SecureStore();
     private final HttpClient httpClient = HttpClient.newHttpClient();
-    private final Map<CustomLLM.ProviderType, ApiClient> clients;
+    private final Map<CustomLLM.ProviderType, ApiClient> clients = Map.of(
+            CustomLLM.ProviderType.OPENAI, new OpenAiClient(),
+            CustomLLM.ProviderType.GEMINI, new GeminiClient(),
+            CustomLLM.ProviderType.DEEPSEEK, new DeepSeekClient()
+    );
     private static final String OLLAMA_REAL_URL = "http://localhost:11434/api/chat";
 
     public ChatHandler() {
-        clients = Map.of(
-                CustomLLM.ProviderType.OPENAI, new OpenAiClient(),
-                CustomLLM.ProviderType.GEMINI, new GeminiClient(),
-                CustomLLM.ProviderType.DEEPSEEK, new DeepSeekClient()
-        );
+        if (settings.isDebug()) {
+            Log.debug("[DEBUG] ChatHandler initialized");
+        }
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        String requestBody = new String(exchange.getRequestBody().readAllBytes());
-        Map<String, Object> requestJson = gson.fromJson(requestBody, Map.class);
-        String modelName = (String) requestJson.get("model");
+        boolean debug = settings.isDebug();
+        String body = new String(exchange.getRequestBody().readAllBytes());
+        if (debug) Log.debug("[DEBUG] ChatHandler request: " + body);
+        Map<String, Object> req = gson.fromJson(body, Map.class);
+        String model = (String) req.get("model");
 
-        Optional<CustomLLM> customLLM = settings.getCustomLLMs().stream()
-                .filter(m -> m.modelName().equalsIgnoreCase(modelName))
+        Optional<CustomLLM> custom = settings.getProviders().stream()
+                .filter(m -> m.isEnabled() && m.getProviderType().name().equalsIgnoreCase(model))
                 .findFirst();
 
-        if (customLLM.isPresent()) {
-            handleCustomModel(customLLM.get(), requestJson, exchange);
+        if (custom.isPresent()) {
+            if (debug) Log.debug("[DEBUG] Using custom model: " + custom.get().getProviderType());
+            ApiClient client = clients.get(custom.get().getProviderType());
+            String key = secureStore.getApiKey(custom.get().getProviderType().name());
+            if (key.isBlank()) {
+                respond(exchange, 401, "API Key not configured");
+            } else {
+                client.handleChatRequest(key, req, exchange);
+            }
         } else {
-            forwardToOllama(requestBody, exchange);
+            if (debug) Log.debug("[DEBUG] Forwarding to Ollama real API");
+            forward(exchange, body);
         }
     }
 
-    private void handleCustomModel(CustomLLM llm, Map<String, Object> request, HttpExchange exchange) throws IOException {
-        ApiClient client = clients.get(llm.providerType());
-        if (client == null) {
-            String error = "Provider " + llm.providerType() + " is not supported.";
-            exchange.sendResponseHeaders(501, error.length());
-            exchange.getResponseBody().write(error.getBytes());
-            exchange.getResponseBody().close();
-            return;
-        }
-
-        String apiKey = secureStore.getApiKey(llm.modelName());
-        if (apiKey == null || apiKey.isBlank()) {
-            String error = "API Key for " + llm.modelName() + " is not configured.";
-            exchange.sendResponseHeaders(401, error.length());
-            exchange.getResponseBody().write(error.getBytes());
-            exchange.getResponseBody().close();
-            return;
-        }
-
-        client.handleChatRequest(apiKey, request, exchange);
-    }
-
-    private void forwardToOllama(String requestBody, HttpExchange exchange) throws IOException {
+    private void forward(HttpExchange ex, String body) throws IOException {
         try {
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest r = HttpRequest.newBuilder()
                     .uri(URI.create(OLLAMA_REAL_URL))
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
                     .header("Content-Type", "application/json")
                     .build();
-
-            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            exchange.getResponseHeaders().putAll(response.headers().map());
-            exchange.sendResponseHeaders(response.statusCode(), response.body().length);
-            exchange.getResponseBody().write(response.body());
-            exchange.getResponseBody().close();
+            HttpResponse<byte[]> resp = httpClient.send(r, HttpResponse.BodyHandlers.ofByteArray());
+            ex.getResponseHeaders().putAll(resp.headers().map());
+            ex.sendResponseHeaders(resp.statusCode(), resp.body().length);
+            ex.getResponseBody().write(resp.body());
+            ex.getResponseBody().close();
         } catch (InterruptedException e) {
-            throw new IOException("Forwarding to Ollama was interrupted", e);
+            throw new IOException(e);
         }
+    }
+
+    private void respond(HttpExchange ex, int code, String msg) throws IOException {
+        ex.sendResponseHeaders(code, msg.length());
+        ex.getResponseBody().write(msg.getBytes());
+        ex.getResponseBody().close();
     }
 }

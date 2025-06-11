@@ -4,7 +4,6 @@
     <vendor>intisy</vendor>
 
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.platform.ml.impl</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationService
@@ -13,5 +12,9 @@
                 serviceImplementation="io.github.intisy.ollama.forward.settings.SecureStore"/>
         <postStartupActivity
                 implementation="io.github.intisy.ollama.forward.proxy.ProxyServerManager"/>
+        <projectConfigurable
+                instance="io.github.intisy.ollama.forward.settings.OllamaForwardSettingsConfigurable"
+                displayName="Ollama Forward"
+                parentId="tools"/>
     </extensions>
 </idea-plugin>
