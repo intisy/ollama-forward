@@ -1,6 +1,6 @@
 package io.github.intisy.ollama.forward.proxy;
 
-import com.esotericsoftware.kryo.kryo5.minlog.Log;
+import io.github.intisy.simple.logger.Log;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.sun.net.httpserver.HttpExchange;
@@ -24,14 +24,14 @@ public class TagsHandler implements HttpHandler {
 
     public TagsHandler() {
         if (settings.isDebug()) {
-            Log.debug("[DEBUG] TagsHandler initialized");
+            Log.debug("TagsHandler initialized");
         }
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         boolean debug = settings.isDebug();
-        if (debug) Log.debug("[DEBUG] TagsHandler called");
+        if (debug) Log.debug("TagsHandler called");
         List<Map<String,Object>> real = fetchReal();
         for (CustomLLM llm : settings.getProviders()) {
             if (!llm.isEnabled()) continue;

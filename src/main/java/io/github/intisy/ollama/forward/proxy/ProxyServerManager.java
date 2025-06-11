@@ -1,10 +1,9 @@
 package io.github.intisy.ollama.forward.proxy;
 
-import com.esotericsoftware.kryo.kryo5.minlog.Log;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.ProjectActivity;
 import com.sun.net.httpserver.HttpServer;
-import io.github.intisy.ollama.forward.settings.PluginSettingsService;
+import io.github.intisy.simple.logger.Log;
 import kotlin.Unit;
 import kotlin.coroutines.Continuation;
 import org.jetbrains.annotations.NotNull;
@@ -33,7 +32,7 @@ public class ProxyServerManager implements ProjectActivity {
     }
 
     private void start() {
-        Log.debug("[DEBUG] Starting proxy server...");
+        Log.debug("Starting proxy server...");
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 server = HttpServer.create(new InetSocketAddress("localhost", PORT), 0);

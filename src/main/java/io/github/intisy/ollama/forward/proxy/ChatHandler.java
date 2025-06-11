@@ -1,6 +1,6 @@
 package io.github.intisy.ollama.forward.proxy;
 
-import com.esotericsoftware.kryo.kryo5.minlog.Log;
+import io.github.intisy.simple.logger.Log;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -29,7 +29,7 @@ public class ChatHandler implements HttpHandler {
 
     public ChatHandler() {
         if (settings.isDebug()) {
-            Log.debug("[DEBUG] ChatHandler initialized");
+            Log.debug("ChatHandler initialized");
         }
     }
 
@@ -37,7 +37,7 @@ public class ChatHandler implements HttpHandler {
     public void handle(HttpExchange exchange) throws IOException {
         boolean debug = settings.isDebug();
         String body = new String(exchange.getRequestBody().readAllBytes());
-        if (debug) Log.debug("[DEBUG] ChatHandler request: " + body);
+        if (debug) Log.debug("ChatHandler request: " + body);
         Map<String, Object> req = gson.fromJson(body, Map.class);
         String model = (String) req.get("model");
 
@@ -46,7 +46,7 @@ public class ChatHandler implements HttpHandler {
                 .findFirst();
 
         if (custom.isPresent()) {
-            if (debug) Log.debug("[DEBUG] Using custom model: " + custom.get().getProviderType());
+            if (debug) Log.debug("Using custom model: " + custom.get().getProviderType());
             ApiClient client = clients.get(custom.get().getProviderType());
             String key = secureStore.getApiKey(custom.get().getProviderType().name());
             if (key.isBlank()) {
@@ -55,7 +55,7 @@ public class ChatHandler implements HttpHandler {
                 client.handleChatRequest(key, req, exchange);
             }
         } else {
-            if (debug) Log.debug("[DEBUG] Forwarding to Ollama real API");
+            if (debug) Log.debug("Forwarding to Ollama real API");
             forward(exchange, body);
         }
     }
