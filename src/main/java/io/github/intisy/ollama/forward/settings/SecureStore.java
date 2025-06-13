@@ -1,27 +1,60 @@
 package io.github.intisy.ollama.forward.settings;
 
 import com.intellij.credentialStore.CredentialAttributes;
-import com.intellij.credentialStore.Credentials;
-import com.intellij.ide.passwordSafe.PasswordSafe;
 
+/**
+ * @author Finn Birich
+ */
 public class SecureStore {
-    private static final String SERVICE_NAME = "OllamaForwardAPIKey";
+    private SecureStoreService service;
+    private ConfigLoader configLoader;
+    private boolean test;
+
+    public void setTest(boolean test) {
+        this.test = test;
+    }
+
+    public boolean isTest() {
+        return test;
+    }
+
+    private SecureStoreService getService() {
+        if (service == null) {
+            service = new SecureStoreService();
+        }
+        return service;
+    }
+
+    private ConfigLoader getConfigLoader() {
+        if (configLoader == null) {
+            configLoader = new ConfigLoader();
+        }
+        return configLoader;
+    }
 
     private CredentialAttributes getAttributes(String key) {
-        return new CredentialAttributes(SERVICE_NAME + "_" + key);
+        if (isTest()) {
+            return null;
+        } else {
+            return getService().getAttributes(key);
+        }
     }
 
     public void saveApiKey(String providerId, String apiKey) {
-        PasswordSafe.getInstance()
-                .set(getAttributes(providerId), new Credentials(providerId, apiKey));
+        if (!isTest())
+            getService().saveApiKey(providerId, apiKey);
     }
 
     public String getApiKey(String providerId) {
-        Credentials creds = PasswordSafe.getInstance().get(getAttributes(providerId));
-        return creds != null ? creds.getPasswordAsString() : "";
+        if (isTest()) {
+            return getConfigLoader().getProperty(providerId);
+        } else {
+            return getService().getApiKey(providerId);
+        }
     }
 
     public void removeApiKey(String providerId) {
-        PasswordSafe.getInstance().set(getAttributes(providerId), null);
+        if (!isTest())
+            getService().removeApiKey(providerId);
     }
 }

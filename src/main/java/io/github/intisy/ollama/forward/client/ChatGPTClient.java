@@ -3,6 +3,8 @@ package io.github.intisy.ollama.forward.client;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpExchange;
+import io.github.intisy.ollama.forward.Server;
+import io.github.intisy.simple.logger.SimpleLogger;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -13,9 +15,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Map;
 
-public class OpenAiClient implements ApiClient {
+public class ChatGPTClient implements ApiClient {
 
     private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
     protected final HttpClient httpClient = HttpClient.newHttpClient();
@@ -26,10 +29,13 @@ public class OpenAiClient implements ApiClient {
     }
 
     @Override
-    public void handleChatRequest(String apiKey, Map<String, Object> requestPayload, HttpExchange exchange) throws IOException {
+    public void handleChatRequest(Server server, String model, String apiKey, Map<String, Object> requestPayload, HttpExchange exchange) throws IOException {
+        SimpleLogger logger = server.getLogger();
+        logger.debug("ChatGPTClient request: " + gson.toJson(requestPayload));
+
         String modelName = (String) requestPayload.get("model");
         Map<String, Object> apiRequestPayload = Map.of(
-                "model", "gpt-4o",
+                "model", model,
                 "messages", requestPayload.get("messages"),
                 "stream", true
         );
@@ -59,21 +65,23 @@ public class OpenAiClient implements ApiClient {
                         }
                         String ollamaChunk = transformToOllamaChunk(data, modelName);
                         if (ollamaChunk != null) {
+                            logger.debug("ChatGPT response chunk: " + ollamaChunk);
                             responseBody.write(ollamaChunk.getBytes(StandardCharsets.UTF_8));
                             responseBody.write('\n');
                             responseBody.flush();
                         }
                     }
                 }
+
+                String finalChunk = createFinalOllamaChunk(modelName, true);
+                logger.debug("ChatGPT final response chunk: " + finalChunk);
+                responseBody.write(finalChunk.getBytes(StandardCharsets.UTF_8));
+                responseBody.write('\n');
+                responseBody.flush();
             }
-            String finalChunk = createFinalOllamaChunk(modelName);
-            exchange.getResponseBody().write(finalChunk.getBytes(StandardCharsets.UTF_8));
-            exchange.getResponseBody().write('\n');
-            exchange.getResponseBody().flush();
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new IOException("Request to API was interrupted", e);
-        } finally {
-            exchange.getResponseBody().close();
         }
     }
 
@@ -83,10 +91,18 @@ public class OpenAiClient implements ApiClient {
             JsonObject delta = chunk.getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("delta");
             if (delta.has("content") && !delta.get("content").isJsonNull()) {
                 String content = delta.get("content").getAsString();
+                if (content.isEmpty()) {
+                    return null;
+                }
+
+                Map<String, Object> messageMap = Map.of(
+                        "role", "assistant",
+                        "content", content
+                );
                 Map<String, Object> ollamaResponse = Map.of(
                         "model", modelName,
-                        "created_at", java.time.ZonedDateTime.now().toString(),
-                        "response", content,
+                        "created_at", Instant.now().toString(),
+                        "message", messageMap,
                         "done", false
                 );
                 return gson.toJson(ollamaResponse);
@@ -95,12 +111,16 @@ public class OpenAiClient implements ApiClient {
         return null;
     }
 
-    private String createFinalOllamaChunk(String modelName) {
+    private String createFinalOllamaChunk(String modelName, boolean done) {
+        Map<String, Object> finalMessageMap = Map.of(
+                "role", "assistant",
+                "content", ""
+        );
         Map<String, Object> finalResponse = Map.of(
                 "model", modelName,
-                "created_at", java.time.ZonedDateTime.now().toString(),
-                "response", "",
-                "done", true,
+                "created_at", Instant.now().toString(),
+                "message", finalMessageMap,
+                "done", done,
                 "total_duration", 1,
                 "prompt_eval_count", 1,
                 "eval_count", 1

@@ -1,6 +1,6 @@
 package io.github.intisy.ollama.forward.client;
 
-public class DeepSeekClient extends OpenAiClient {
+public class DeepSeekClient extends ChatGPTClient {
     private static final String DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
 
     @Override

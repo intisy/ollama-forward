@@ -1,12 +1,13 @@
-package io.github.intisy.ollama.forward.proxy;
+package io.github.intisy.ollama.forward.proxy.handler;
 
-import io.github.intisy.simple.logger.Log;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import io.github.intisy.ollama.forward.Server;
 import io.github.intisy.ollama.forward.settings.CustomLLM;
-import io.github.intisy.ollama.forward.settings.PluginSettingsService;
+import io.github.intisy.ollama.forward.settings.Settings;
+import io.github.intisy.simple.logger.SimpleLogger;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
@@ -18,29 +19,38 @@ import java.util.Map;
 
 public class TagsHandler implements HttpHandler {
     private final Gson gson = new Gson();
-    private final PluginSettingsService settings = PluginSettingsService.getInstance();
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private static final String OLLAMA_REAL_URL = "http://localhost:11434/api/tags";
 
-    public TagsHandler() {
-        if (settings.isDebug()) {
-            Log.debug("TagsHandler initialized");
-        }
+    private final Settings settings;
+    private final SimpleLogger logger;
+
+    public TagsHandler(Server server) {
+        this.settings = server.getSettings();
+        this.logger = server.getLogger();
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        boolean debug = settings.isDebug();
-        if (debug) Log.debug("TagsHandler called");
+        String body = new String(exchange.getRequestBody().readAllBytes());
+        logger.debug("TagsHandler request: " + body);
         List<Map<String,Object>> real = fetchReal();
         for (CustomLLM llm : settings.getProviders()) {
             if (!llm.isEnabled()) continue;
             real.add(Map.of(
-                    "name", llm.getProviderType().name() + ":latest",
-                    "model", llm.getProviderType().name() + ":latest",
-                    "modified_at", "2024-01-01T00:00:00.000000Z",
+                    "name", llm.getProviderType().name().toLowerCase() + ":" + llm.getModel(),
+                    "model", llm.getProviderType().name().toLowerCase() + ":" + llm.getModel(),
+                    "modified_at", "2000-01-01T00:00:00.000000Z",
                     "size", 0,
-                    "digest", "custom-" + llm.getProviderType().name().hashCode()
+                    "digest", llm.getProviderType().name().hashCode(),
+                    "details", Map.of(
+                            "parent_model", "",
+                            "format", "gguf",
+                            "family", "",
+                            "families", List.of(),
+                            "parameter_size", "8.2B",
+                            "quantization_level", "Q4_K_M"
+                            )
             ));
         }
         String resp = gson.toJson(Map.of("models", real));

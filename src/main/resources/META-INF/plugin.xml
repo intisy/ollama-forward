@@ -7,9 +7,9 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationService
-                serviceImplementation="io.github.intisy.ollama.forward.settings.PluginSettingsService"/>
+                serviceImplementation="io.github.intisy.ollama.forward.settings.SettingsService"/>
         <applicationService
-                serviceImplementation="io.github.intisy.ollama.forward.settings.SecureStore"/>
+                serviceImplementation="io.github.intisy.ollama.forward.settings.SecureStoreService"/>
         <postStartupActivity
                 implementation="io.github.intisy.ollama.forward.proxy.ProxyServerManager"/>
         <projectConfigurable
